@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     name: Build unsigned IPA
-    runs-on: macos-latest
+    runs-on: macos-14
     timeout-minutes: 30
 
     steps:
@@ -16,17 +16,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Select Xcode
-        run: |
-          sudo xcode-select -s /Applications/Xcode_15.4.app || \
-          sudo xcode-select -s /Applications/Xcode_15.3.app || \
-          sudo xcode-select -s /Applications/Xcode.app
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
 
       - name: Install XcodeGen
-        run: |
-          if ! command -v xcodegen >/dev/null; then
-            brew install xcodegen
-          fi
-          xcodegen --version
+        run: brew install xcodegen
 
       - name: Generate Xcode project
         working-directory: ios
@@ -34,18 +27,7 @@ jobs:
 
       - name: Build for device (unsigned)
         run: |
-          set -o pipefail
           xcodebuild \
-            -project ios/SafetyOps.xcodeproj \
-            -scheme SafetyOps \
-            -configuration Release \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -derivedDataPath "$RUNNER_TEMP/dd" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            | xcpretty || xcodebuild \
             -project ios/SafetyOps.xcodeproj \
             -scheme SafetyOps \
             -configuration Release \
@@ -59,22 +41,12 @@ jobs:
 
       - name: Package unsigned IPA
         run: |
-          APP="$RUNNER_TEMP/dd/Build/Products/Release-iphoneos/SafetyOps.app"
-          if [ ! -d "$APP" ]; then
-            echo "::error::Build product not found at $APP"
-            find "$RUNNER_TEMP/dd/Build" -name '*.app' -maxdepth 4
-            exit 1
-          fi
-          mkdir -p "$RUNNER_TEMP/unsigned/Payload"
-          cp -R "$APP" "$RUNNER_TEMP/unsigned/Payload/"
-          cd "$RUNNER_TEMP/unsigned"
-          zip -qry "$RUNNER_TEMP/SafetyOps-unsigned.ipa" Payload
-          ls -lh "$RUNNER_TEMP/SafetyOps-unsigned.ipa"
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$RUNNER_TEMP/dd/Build/Products/Release-iphoneos/SafetyOps.app" "$RUNNER_TEMP/Payload/"
+          cd "$RUNNER_TEMP" && zip -qry SafetyOps-unsigned.ipa Payload
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: SafetyOps-ios-unsigned
           path: ${{ runner.temp }}/SafetyOps-unsigned.ipa
-          retention-days: 30
-          if-no-files-found: error

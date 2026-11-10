@@ -18,31 +18,21 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
     }
 
     func requestPermissions() {
-        let status = mgr.authorizationStatus
-        switch status {
-        case .notDetermined:
-            mgr.requestAlwaysAuthorization()
-        case .authorizedWhenInUse:
-            // Step up to Always once we're already authorized
-            mgr.requestAlwaysAuthorization()
-        default:
-            break
-        }
+        mgr.requestAlwaysAuthorization()
         mgr.allowsBackgroundLocationUpdates = true
         mgr.pausesLocationUpdatesAutomatically = false
         mgr.startUpdatingLocation()
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        if manager.authorizationStatus == .authorizedAlways ||
-           manager.authorizationStatus == .authorizedWhenInUse {
+        if manager.authorizationStatus == .authorizedAlways || manager.authorizationStatus == .authorizedWhenInUse {
             manager.startUpdatingLocation()
         }
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let loc = locations.last else { return }
-        last = String(format: "%.5f, %.5f  ±%.0fm", loc.coordinate.latitude, loc.coordinate.longitude, loc.horizontalAccuracy)
+        last = String(format: "%.5f, %.5f ±%.0fm", loc.coordinate.latitude, loc.coordinate.longitude, loc.horizontalAccuracy)
         guard Date().timeIntervalSince(lastSentAt) >= Config.locationInterval else { return }
         lastSentAt = Date()
         send(loc)
@@ -61,11 +51,14 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         var req = URLRequest(url: url, timeoutInterval: Config.uploadTimeout)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
         let speedMps = max(0.0, loc.speed)
         let bearing = loc.course >= 0 ? loc.course : 0.0
         let alt = loc.altitude
+        let batt = batteryPct()
+        
         let body = """
-        {"lat":\(loc.coordinate.latitude),"lon":\(loc.coordinate.longitude),"acc":\(loc.horizontalAccuracy),"battery":\(batteryPct()),"platform":"ios","speed":\(speedMps),"bearing":\(bearing),"alt":\(alt)}
+        {"lat":\(loc.coordinate.latitude),"lon":\(loc.coordinate.longitude),"acc":\(loc.horizontalAccuracy),"battery":\(batt),"platform":"ios","speed":\(speedMps),"bearing":\(bearing),"alt":\(alt)}
         """
         req.httpBody = body.data(using: .utf8)
         URLSession.shared.dataTask(with: req).resume()

@@ -10,7 +10,6 @@ final class CameraStreamer: NSObject, ObservableObject, AVCaptureVideoDataOutput
     private let queue = DispatchQueue(label: "safetyops.camera", qos: .userInitiated)
     private let ctx = CIContext(options: [.useSoftwareRenderer: false])
     private var lastFrameAt = Date.distantPast
-    private var frameCount = 0
 
     func start() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
@@ -93,7 +92,6 @@ final class CameraStreamer: NSObject, ObservableObject, AVCaptureVideoDataOutput
         req.httpMethod = "POST"
         req.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
         URLSession.shared.uploadTask(with: req, from: jpeg).resume()
-        frameCount += 1
     }
 
     private func setStatus(_ s: String) {

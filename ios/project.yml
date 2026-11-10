@@ -3,33 +3,25 @@ options:
   bundleIdPrefix: com.safetyops
   deploymentTarget:
     iOS: "16.0"
-  createIntermediateGroups: true
-settings:
-  base:
-    SWIFT_VERSION: "5.0"
-    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
 targets:
   SafetyOps:
     type: application
     platform: iOS
-    sources:
-      - path: SafetyOps
+    sources: [SafetyOps]
     info:
       path: SafetyOps/Info.plist
       properties:
+        CFBundleDisplayName: Mobile Escort
         UILaunchScreen: {}
-        UIRequiresFullScreen: true
-        UIStatusBarStyle: UIStatusBarStyleLightContent
-        NSLocationWhenInUseUsageDescription: "Field-safety location while the app is open."
-        NSLocationAlwaysAndWhenInUseUsageDescription: "Continuous field-safety location, including when the app is in the background."
-        NSCameraUsageDescription: "Live camera check-in requested by HQ."
+        NSLocationWhenInUseUsageDescription: "Location required for contact compliance."
+        NSLocationAlwaysAndWhenInUseUsageDescription: "Continuous background location required for contact compliance."
+        NSCameraUsageDescription: "Camera feed required for contact compliance."
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
-        NSAppTransportSecurity_2: null
-        UIBackgroundModes:
-          - location
+        UIBackgroundModes: [location]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.safetyops.field
         TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.0"
         CODE_SIGN_STYLE: Automatic
