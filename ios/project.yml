@@ -1,0 +1,35 @@
+name: SafetyOps
+options:
+  bundleIdPrefix: com.safetyops
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+targets:
+  SafetyOps:
+    type: application
+    platform: iOS
+    sources:
+      - path: SafetyOps
+    info:
+      path: SafetyOps/Info.plist
+      properties:
+        UILaunchScreen: {}
+        UIRequiresFullScreen: true
+        UIStatusBarStyle: UIStatusBarStyleLightContent
+        NSLocationWhenInUseUsageDescription: "Field-safety location while the app is open."
+        NSLocationAlwaysAndWhenInUseUsageDescription: "Continuous field-safety location, including when the app is in the background."
+        NSCameraUsageDescription: "Live camera check-in requested by HQ."
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        NSAppTransportSecurity_2: null
+        UIBackgroundModes:
+          - location
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.safetyops.field
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic

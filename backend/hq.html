@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>WTD // TACTICAL OVERWATCH</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root {
+    --bg: #03080e;
+    --panel: rgba(5, 15, 30, 0.85);
+    --cyan: #00e5ff;
+    --gold: #fbbf24;
+    --green: #10b981;
+    --red: #f43f5e;
+    --text: #e0f2fe;
+    --dim: #7dd3fc;
+    --mono: 'Share Tech Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--mono); overflow: hidden; }
+
+  /* CRT/Scanline Overlay */
+  body::after {
+    content: " "; display: block; position: absolute; top: 0; left: 0; bottom: 0; right: 0;
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+    z-index: 9999; background-size: 100% 4px, 6px 100%; pointer-events: none; opacity: 0.6;
+  }
+
+  #app { display: grid; grid-template-rows: 1fr 1fr; height: 100dvh; padding: 6px; gap: 6px; }
+  
+  @media (min-width: 1000px) {
+    #app { grid-template-columns: 300px 1fr 350px; grid-template-rows: 1fr; padding: 12px; gap: 12px; }
+  }
+
+  .panel {
+    background: var(--panel); border: 1px solid rgba(0, 229, 255, 0.3);
+    position: relative; overflow: hidden; box-shadow: inset 0 0 30px rgba(0, 229, 255, 0.05);
+    backdrop-filter: blur(10px);
+  }
+
+  /* Sci-Fi Corner Brackets */
+  .panel::before, .panel::after, .panel-br::before, .panel-br::after {
+    content: ''; position: absolute; width: 12px; height: 12px; pointer-events: none; z-index: 10;
+  }
+  .panel::before { top: 0; left: 0; border-top: 2px solid var(--gold); border-left: 2px solid var(--gold); }
+  .panel::after { top: 0; right: 0; border-top: 2px solid var(--gold); border-right: 2px solid var(--gold); }
+  .panel-br::before { bottom: 0; left: 0; border-bottom: 2px solid var(--gold); border-left: 2px solid var(--gold); }
+  .panel-br::after { bottom: 0; right: 0; border-bottom: 2px solid var(--gold); border-right: 2px solid var(--gold); }
+
+  /* Headers */
+  .hud-header {
+    padding: 6px 12px; background: rgba(0, 229, 255, 0.1); border-bottom: 1px solid var(--cyan);
+    font-size: 10px; font-weight: bold; letter-spacing: 2px; color: var(--cyan);
+    display: flex; justify-content: space-between; align-items: center; text-transform: uppercase;
+  }
+
+  /* Map Area */
+  #map { width: 100%; height: 100%; background: var(--bg); cursor: crosshair; }
+  .leaflet-container { background: var(--bg) !important; }
+  
+  /* Target Reticle */
+  .reticle-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 150px; height: 150px; pointer-events: none; z-index: 400; opacity: 0.5; }
+  .reticle-ring { width: 100%; height: 100%; border: 1px dashed var(--cyan); border-radius: 50%; animation: spin 10s linear infinite; }
+  .reticle-cross::before, .reticle-cross::after { content: ''; position: absolute; background: var(--cyan); }
+  .reticle-cross::before { top: 50%; left: 10%; right: 10%; height: 1px; }
+  .reticle-cross::after { left: 50%; top: 10%; bottom: 10%; width: 1px; }
+  @keyframes spin { 100% { transform: rotate(360deg); } }
+
+  /* Camera Feed */
+  .feed-wrap { position: relative; width: 100%; height: 100%; background: #000; display: flex; align-items: center; justify-content: center; }
+  #feed { width: 100%; height: 100%; object-fit: cover; opacity: 0.8; filter: contrast(1.2) sepia(0.2) hue-rotate(180deg); }
+  
+  /* Camera Target Brackets */
+  .cam-bracket { position: absolute; width: 40px; height: 40px; border: 2px solid var(--green); pointer-events: none; }
+  .cam-tl { top: 20px; left: 20px; border-right: none; border-bottom: none; }
+  .cam-tr { top: 20px; right: 20px; border-left: none; border-bottom: none; }
+  .cam-bl { bottom: 20px; left: 20px; border-right: none; border-top: none; }
+  .cam-br { bottom: 20px; right: 20px; border-left: none; border-top: none; }
+  
+  .rec-dot { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); color: var(--red); font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 6px; }
+  .rec-dot::before { content: ''; width: 8px; height: 8px; background: var(--red); border-radius: 50%; animation: blink 1s infinite alternate; }
+  @keyframes blink { 0% { opacity: 0; } 100% { opacity: 1; } }
+
+  /* Telemetry Data */
+  .data-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 8px; height: calc(100% - 30px); overflow-y: auto; }
+  .stat-box { background: rgba(0,0,0,0.5); border: 1px solid rgba(0, 229, 255, 0.1); padding: 6px 8px; display: flex; flex-direction: column; justify-content: center; }
+  .stat-label { font-size: 8px; color: var(--dim); letter-spacing: 1px; margin-bottom: 2px; }
+  .stat-val { font-size: 16px; font-weight: bold; color: #fff; text-shadow: 0 0 5px rgba(255,255,255,0.3); }
+  .stat-val.gold { color: var(--gold); text-shadow: 0 0 8px rgba(251,191,36,0.5); }
+  .stat-val.green { color: var(--green); text-shadow: 0 0 8px rgba(16,185,129,0.5); }
+  .stat-val.red { color: var(--red); text-shadow: 0 0 8px rgba(244,63,94,0.5); }
+  .wide { grid-column: span 2; }
+
+  /* Compass */
+  .compass-wrap { display: flex; align-items: center; justify-content: center; margin-top: 4px; }
+  .compass { width: 50px; height: 50px; border: 2px solid var(--cyan); border-radius: 50%; position: relative; box-shadow: 0 0 10px rgba(0,229,255,0.2); }
+  .compass-needle { position: absolute; top: 5px; left: 50%; width: 2px; height: 20px; background: var(--red); transform-origin: bottom center; margin-left: -1px; transition: transform 0.5s ease-out; }
+  .compass-needle::after { content: ''; position: absolute; top: -2px; left: -3px; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 6px solid var(--red); }
+  .compass-n { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); font-size: 9px; color: var(--cyan); }
+
+  /* Terminal Log */
+  .terminal { height: 100%; padding: 8px; font-size: 10px; color: var(--green); overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; line-height: 1.3; }
+  .term-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.8; }
+  .term-line span { color: var(--dim); }
+
+  /* Device List */
+  .dev-list { overflow-y: auto; height: calc(100% - 30px); }
+  .dev-item { padding: 10px; border-bottom: 1px solid rgba(0,229,255,0.1); cursor: pointer; transition: 0.2s; }
+  .dev-item:hover, .dev-item.active { background: rgba(0, 229, 255, 0.15); border-left: 3px solid var(--cyan); padding-left: 7px; }
+  .dev-name { font-size: 12px; font-weight: bold; color: #fff; display: flex; justify-content: space-between; }
+  .dev-meta { font-size: 9px; color: var(--dim); margin-top: 4px; display: flex; justify-content: space-between; }
+
+  /* Mobile Layout specific */
+  .mobile-hide { display: none; }
+  @media (min-width: 1000px) { .mobile-hide { display: flex; } }
+  .mobile-top { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  @media (min-width: 1000px) { .mobile-top { display: contents; } }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <!-- LEFT COLUMN: Device List & System Status -->
+  <aside class="panel panel-br left-col" style="display:flex; flex-direction:column;">
+    <div class="hud-header"><span>UPLINK // NODE STATUS</span><span id="sys-stat" style="color:var(--red);">● OFFLINE</span></div>
+    <div class="dev-list" id="list"><div style="padding:20px; text-align:center; color:var(--dim); font-size:10px;">AWAITING TARGET...</div></div>
+  </aside>
+
+  <!-- CENTER COLUMN: Map (Top on Mobile) & Camera Feed (Bottom on Mobile) -->
+  <div class="mobile-top" style="overflow:hidden;">
+    <div class="panel" style="position:relative;">
+      <div class="hud-header"><span>TACTICAL MAP</span><span id="target-coord">LOCATING...</span></div>
+      <div id="map"></div>
+      <div class="reticle-overlay">
+        <div class="reticle-cross"><div class="reticle-ring"></div></div>
+      </div>
+    </div>
+
+    <div class="panel panel-br mobile-hide" style="position:relative; background:#000;">
+      <div class="hud-header"><span>OPTICAL FEED</span><span id="cam-stat" style="color:var(--dim);">STANDBY</span></div>
+      <div class="feed-wrap">
+        <img id="feed" alt="">
+        <div class="rec-dot">REC</div>
+        <div class="cam-bracket cam-tl"></div><div class="cam-bracket cam-tr"></div>
+        <div class="cam-bracket cam-bl"></div><div class="cam-bracket cam-br"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT COLUMN: Telemetry HUD & Terminal -->
+  <aside class="panel panel-br right-col" style="display:flex; flex-direction:column;">
+    <div class="hud-header"><span>BIOMETRIC/GEO TELEMETRY</span><span id="dev-id-hdr">UNKNOWN</span></div>
+    
+    <div class="data-grid">
+      <div class="stat-box"><span class="stat-label">VELOCITY (MPH)</span><span class="stat-val gold" id="v-speed">0</span></div>
+      <div class="stat-box"><span class="stat-label">VELOCITY (KNOTS)</span><span class="stat-val gold" id="v-knots">0</span></div>
+      
+      <div class="stat-box"><span class="stat-label">HEADING</span><span class="stat-val" id="v-heading">0° N</span></div>
+      <div class="stat-box compass-wrap">
+        <div class="compass"><div class="compass-n">N</div><div class="compass-needle" id="compass-needle"></div></div>
+      </div>
+
+      <div class="stat-box"><span class="stat-label">ALTITUDE (FT)</span><span class="stat-val" id="v-alt">0</span></div>
+      <div class="stat-box"><span class="stat-label">BATTERY</span><span class="stat-val green" id="v-batt">0%</span></div>
+
+      <div class="stat-box wide"><span class="stat-label">GPS COORDINATES</span><span class="stat-val" id="v-gps">0.00000, 0.00000</span></div>
+      
+      <div class="stat-box"><span class="stat-label">ACCURACY</span><span class="stat-val" id="v-acc">0m</span></div>
+      <div class="stat-box"><span class="stat-label">FRAMES RX</span><span class="stat-val" id="v-frames">0</span></div>
+      
+      <div class="stat-box wide"><span class="stat-label">UPTIME / LAST PING</span><span class="stat-val" id="v-ping">0s AGO</span></div>
+    </div>
+
+    <div class="panel" style="flex:1; border:none; border-top:1px solid var(--cyan); background:rgba(0,0,0,0.6);">
+      <div class="terminal" id="terminal">
+        <div class="term-line"><span>[SYS]</span> INITIALIZING TACTICAL OVERWATCH...</div>
+        <div class="term-line"><span>[NET]</span> WAITING FOR UPLINK...</div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function(){
+  // Map setup: dark theme, street level zoom 17
+  var map = L.map('map', { zoomControl: false, attributionControl: false }).setView([39.5, -98.35], 4);
+  L.tileLayer('https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=cb1_55s6_1_e4fc9e2061b073e7c0661f99', { maxZoom: 19 }).addTo(map);
+
+  // DOM Elements
+  const els = {
+    list: document.getElementById('list'), sysStat: document.getElementById('sys-stat'),
+    targetCoord: document.getElementById('target-coord'), camStat: document.getElementById('cam-stat'),
+    feed: document.getElementById('feed'), devIdHdr: document.getElementById('dev-id-hdr'),
+    vSpeed: document.getElementById('v-speed'), vKnots: document.getElementById('v-knots'),
+    vHeading: document.getElementById('v-heading'), needle: document.getElementById('compass-needle'),
+    vAlt: document.getElementById('v-alt'), vBatt: document.getElementById('v-batt'),
+    vGps: document.getElementById('v-gps'), vAcc: document.getElementById('v-acc'),
+    vFrames: document.getElementById('v-frames'), vPing: document.getElementById('v-ping'),
+    terminal: document.getElementById('terminal')
+  };
+
+  const state = { devices: new Map(), locations: new Map(), markers: new Map(), trails: new Map(), selected: null };
+  let lastRender = 0;
+
+  function logTerminal(msg, type='SYS') {
+    const time = new Date().toISOString().split('T')[1].substring(0,8);
+    const div = document.createElement('div');
+    div.className = 'term-line';
+    div.innerHTML = `<span>[${time}][${type}]</span> ${msg}`;
+    els.terminal.appendChild(div);
+    if (els.terminal.childNodes.length > 20) els.terminal.removeChild(els.terminal.firstChild);
+    els.terminal.scrollTop = els.terminal.scrollHeight;
+  }
+
+  function getCompass(b) { return ['N','NE','E','SE','S','SW','W','NW'][Math.round(b / 45) % 8]; }
+  
+  function formatTimeAgo(t) {
+    const s = Math.floor((Date.now() - t) / 1000);
+    if (s < 60) return s + 's AGO';
+    return Math.floor(s / 60) + 'm AGO';
+  }
+
+  function upsertMarker(id, lat, lon) {
+    let m = state.markers.get(id);
+    if (!m) {
+      m = L.circleMarker([lat, lon], { radius: 6, weight: 2, color: '#00e5ff', fillColor: '#00e5ff', fillOpacity: 0.8 }).addTo(map);
+      m.on('click', () => select(id));
+      state.markers.set(id, m);
+      const trail = L.polyline([], { color: '#00e5ff', weight: 2, opacity: 0.4, dashArray: '4, 4' }).addTo(map);
+      state.trails.set(id, trail);
+    } else {
+      m.setLatLng([lat, lon]);
+    }
+    const trail = state.trails.get(id);
+    const pts = trail.getLatLngs();
+    if (!pts.length || pts[pts.length-1].lat !== lat || pts[pts.length-1].lng !== lon) {
+      pts.push([lat, lon]);
+      if (pts.length > 200) pts.shift();
+      trail.setLatLngs(pts);
+    }
+  }
+
+  function select(id) {
+    state.selected = id;
+    const shortId = id.substring(0, 8).toUpperCase();
+    els.devIdHdr.textContent = shortId;
+    els.camStat.textContent = 'LIVE';
+    els.camStat.style.color = 'var(--green)';
+    els.feed.src = '/stream/' + encodeURIComponent(id) + '?t=' + Date.now();
+    els.feed.style.display = 'block';
+    logTerminal(`TARGET ACQUIRED: ${shortId}`, 'TGT');
+    renderDevices();
+    
+    if (state.markers.has(id)) {
+      map.flyTo(state.markers.get(id).getLatLng(), 17, { duration: 1.5 });
+    }
+  }
+
+  function renderDevices() {
+    if (state.devices.size === 0) return;
+    const sorted = Array.from(state.devices.values()).sort((a,b) => b.lastSeen - a.lastSeen);
+    els.list.innerHTML = '';
+    sorted.forEach(d => {
+      const loc = state.locations.get(d.id);
+      const isLive = (Date.now() - d.lastSeen) < 15000;
+      const div = document.createElement('div');
+      div.className = 'dev-item' + (d.id === state.selected ? ' active' : '');
+      div.innerHTML = `
+        <div class="dev-name">
+          <span><span style="color:${isLive?'var(--green)':'var(--red)'}">●</span> ${d.id.substring(0, 8).toUpperCase()}</span>
+          <span style="color:var(--gold)">${loc ? Math.floor(loc.acc) + 'm' : 'NO FIX'}</span>
+        </div>
+        <div class="dev-meta">
+          <span>${d.platform.toUpperCase()}</span>
+          <span>${formatTimeAgo(d.lastSeen)}</span>
+        </div>
+      `;
+      div.onclick = () => select(d.id);
+      els.list.appendChild(div);
+    });
+    els.sysStat.textContent = '● ONLINE';
+    els.sysStat.style.color = 'var(--green)';
+  }
+
+  function updateTelemetry() {
+    if (!state.selected) return;
+    const id = state.selected;
+    const d = state.devices.get(id);
+    const loc = state.locations.get(id);
+    if (!d || !loc) return;
+
+    // Calculations
+    const mph = Math.round((loc.speed || 0) * 2.23694);
+    const knots = Math.round((loc.speed || 0) * 1.94384);
+    const altFt = Math.round((loc.alt || 0) * 3.28084);
+    const compass = getCompass(loc.bearing || 0);
+
+    // Update DOM
+    els.vSpeed.textContent = mph;
+    els.vKnots.textContent = knots;
+    els.vHeading.textContent = `${Math.round(loc.bearing || 0)}° ${compass}`;
+    els.needle.style.transform = `rotate(${loc.bearing || 0}deg)`;
+    els.vAlt.textContent = altFt;
+    els.vBatt.textContent = (loc.battery !== null ? loc.battery : '0') + '%';
+    els.vGps.textContent = `${loc.lat.toFixed(5)}, ${loc.lon.toFixed(5)}`;
+    els.vAcc.textContent = '±' + Math.floor(loc.acc) + 'm';
+    els.vFrames.textContent = d.frames || 0;
+    els.vPing.textContent = formatTimeAgo(d.lastSeen);
+
+    // Coordinate header update
+    els.targetCoord.textContent = `${loc.lat.toFixed(4)}, ${loc.lon.toFixed(4)}`;
+    
+    // Color logic for battery
+    els.vBatt.className = 'stat-val ' + (loc.battery > 20 ? 'green' : 'red');
+  }
+
+  function connect() {
+    const es = new EventSource('/events');
+    es.addEventListener('snapshot', e => {
+      const snap = JSON.parse(e.data);
+      (snap.devices || []).forEach(d => state.devices.set(d.id, d));
+      Object.entries(snap.locations || {}).forEach(([k, v]) => state.locations.set(k, v));
+      state.locations.forEach((loc, id) => upsertMarker(id, loc.lat, loc.lon));
+      renderDevices(); updateTelemetry();
+      logTerminal(`ESTABLISHED UPLINK WITH ${state.devices.size} NODES`, 'NET');
+    });
+    es.addEventListener('device_new', e => {
+      const d = JSON.parse(e.data);
+      state.devices.set(d.id, d);
+      logTerminal(`NEW NODE DETECTED: ${d.id.substring(0,8).toUpperCase()}`, 'NET');
+      renderDevices();
+    });
+    es.addEventListener('location', e => {
+      const msg = JSON.parse(e.data);
+      const d = state.devices.get(msg.device) || { id: msg.device, platform: 'unknown', lastSeen: Date.now(), frames: 0 };
+      d.lastSeen = msg.t;
+      state.devices.set(msg.device, d);
+      state.locations.set(msg.device, { 
+        lat: msg.lat, lon: msg.lon, acc: msg.acc, battery: msg.battery, 
+        speed: msg.speed, bearing: msg.bearing, alt: msg.alt, t: msg.t 
+      });
+      upsertMarker(msg.device, msg.lat, msg.lon);
+      
+      if (state.selected === msg.device) updateTelemetry();
+      
+      const now = Date.now();
+      if (now - lastRender > 2000) { renderDevices(); lastRender = now; }
+    });
+    es.onerror = () => {
+      els.sysStat.textContent = '● DISCONNECTED';
+      els.sysStat.style.color = 'var(--red)';
+      logTerminal('CONNECTION LOST. ATTEMPTING RECONNECT...', 'ERR');
+      setTimeout(connect, 2000); es.close();
+    };
+  }
+
+  connect();
+  setInterval(updateTelemetry, 1000); // Keep ping time fresh
+})();
+</script>
+</body>
+</html>

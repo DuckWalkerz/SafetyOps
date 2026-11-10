@@ -1,0 +1,7 @@
+services:
+  safetyops:
+    build: .
+    ports: ["9090:9090"]
+    restart: unless-stopped
+    environment:
+      PORT: 9090
